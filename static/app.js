@@ -4149,7 +4149,12 @@ async function loadPlugins() {
                 if (!loadedScripts.has(scriptKey)) {
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
-                        script.src = `/api/plugins/${plugin.id}/screen.js`;
+                        // Include version in URL so a plugin upgrade within the
+                        // same browser session fetches the new screen.js instead
+                        // of a cached copy keyed only by path (matches the art
+                        // URL ?v=mtime convention elsewhere in this file).
+                        const v = encodeURIComponent(plugin.version || '');
+                        script.src = `/api/plugins/${plugin.id}/screen.js${v ? `?v=${v}` : ''}`;
                         script.dataset.pluginId = plugin.id;
                         script.dataset.pluginVersion = plugin.version || '';
                         script.onload = () => { loadedScripts.add(scriptKey); resolve(); };
