@@ -3970,6 +3970,10 @@ async function loadPlugins() {
         // — drop the stale key so screen.js re-runs against the fresh DOM
         // we're about to inject.
         const loadedScripts = window.slopsmith._loadedPluginScripts || (window.slopsmith._loadedPluginScripts = new Set());
+        // JSON.stringify ensures id and version can't ambiguously merge —
+        // a raw `id@version` concat would collide on `id='a@b', v='c'` vs
+        // `id='a', v='b@c'`. Plugin IDs are not constrained server-side.
+        const _pluginScriptKey = (p) => JSON.stringify([p.id, p.version || '']);
         const existingSettingsByPluginId = new Map();
         if (settingsContainer) {
             for (const child of settingsContainer.children) {
@@ -3980,7 +3984,7 @@ async function loadPlugins() {
         const alreadyHydrated = new Set();
         for (const p of plugins) {
             if (!p.has_script) continue;
-            const key = `${p.id}@${p.version || ''}`;
+            const key = _pluginScriptKey(p);
             if (!loadedScripts.has(key)) continue;
             const screenOk = !p.has_screen || !!document.getElementById(`plugin-${p.id}`);
             const settingsOk = !p.has_settings || existingSettingsByPluginId.has(p.id);
@@ -3988,6 +3992,13 @@ async function loadPlugins() {
                 alreadyHydrated.add(p.id);
             } else {
                 loadedScripts.delete(key);
+                // Remove the orphaned <script> tag for this plugin so that
+                // multiple disappear/reappear cycles in one session don't
+                // accumulate stale <script data-plugin-id=...> nodes in
+                // the DOM.
+                document.querySelectorAll(
+                    `script[data-plugin-id="${CSS.escape(p.id)}"]`
+                ).forEach((s) => s.remove());
             }
         }
 
@@ -4003,7 +4014,10 @@ async function loadPlugins() {
             });
         }
         document.querySelectorAll('.screen[id^="plugin-"]').forEach((el) => {
-            const pid = el.id.replace(/^plugin-/, '');
+            // Prefer dataset.pluginId (set on injection) — id-prefix parse
+            // would mis-handle a plugin whose id starts with "plugin-".
+            const pid = (el.dataset && el.dataset.pluginId)
+                || el.id.replace(/^plugin-/, '');
             if (!alreadyHydrated.has(pid)) el.remove();
         });
 
@@ -4202,7 +4216,7 @@ async function loadPlugins() {
 
             // Load plugin JS
             if (plugin.has_script) {
-                const scriptKey = `${plugin.id}@${plugin.version || ''}`;
+                const scriptKey = _pluginScriptKey(plugin);
                 if (!loadedScripts.has(scriptKey)) {
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
