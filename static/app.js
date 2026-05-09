@@ -3954,11 +3954,35 @@ async function loadPlugins() {
 
         const settingsContainer = document.getElementById('plugin-settings');
 
-        // One-shot hydration guard: always clear plugin-owned containers first.
+        // Plugins whose screen.js has already been evaluated this session at
+        // the current version. Their listeners were bound to the existing
+        // settings / screen DOM, so we must preserve that DOM — the script
+        // load guard below skips re-evaluating screen.js, and a fresh empty
+        // DOM with no listeners would leave the plugin half-hydrated on
+        // subsequent loadPlugins() calls (e.g. _scheduleStartupRehydration).
+        const loadedScripts = window.slopsmith._loadedPluginScripts || (window.slopsmith._loadedPluginScripts = new Set());
+        const alreadyHydrated = new Set();
+        for (const p of plugins) {
+            if (p.has_script && loadedScripts.has(`${p.id}@${p.version || ''}`)) {
+                alreadyHydrated.add(p.id);
+            }
+        }
+
+        // Clear plugin-owned containers, but keep already-hydrated plugins'
+        // settings / screen DOM. Nav links carry no per-plugin script state,
+        // so always rebuild them.
         navContainer.innerHTML = '';
         mobileNavContainer.innerHTML = '<span class="text-xs text-gray-600 uppercase tracking-wider">Plugins</span>';
-        if (settingsContainer) settingsContainer.innerHTML = '';
-        document.querySelectorAll('.screen[id^="plugin-"]').forEach((el) => el.remove());
+        if (settingsContainer) {
+            [...settingsContainer.children].forEach((el) => {
+                const pid = el.dataset ? el.dataset.pluginId : null;
+                if (!pid || !alreadyHydrated.has(pid)) el.remove();
+            });
+        }
+        document.querySelectorAll('.screen[id^="plugin-"]').forEach((el) => {
+            const pid = el.id.replace(/^plugin-/, '');
+            if (!alreadyHydrated.has(pid)) el.remove();
+        });
 
         // Plugin settings area hosts both "Plugin Updates" and per-plugin
         // collapsibles. Reveal it whenever any plugins are installed —
@@ -4010,11 +4034,17 @@ async function loadPlugins() {
             try {
             const screenId = `plugin-${plugin.id}`;
 
-            // Inject screen container
-            if (plugin.has_screen) {
+            // Inject screen container. Skip for already-hydrated plugins —
+            // their existing screen DOM still has the listeners that
+            // screen.js bound on first load (rebuilding here would orphan
+            // them, since the script load guard further down won't re-run
+            // screen.js to re-bind).
+            if (plugin.has_screen && !alreadyHydrated.has(plugin.id)) {
                 const screenDiv = document.createElement('div');
                 screenDiv.id = screenId;
                 screenDiv.className = 'screen';
+                screenDiv.dataset.pluginId = plugin.id;
+                screenDiv.dataset.pluginVersion = plugin.version || '';
                 // Insert before the player screen
                 const player = document.getElementById('player');
                 player.parentNode.insertBefore(screenDiv, player);
@@ -4026,9 +4056,14 @@ async function loadPlugins() {
             // Inject settings section — wrapped in a collapsible <details>
             // per plugin so the page stays scannable as plugins accumulate.
             // Collapsed by default; <details>/<summary> handles state natively.
-            if (plugin.has_settings && settingsContainer) {
+            // Skip for already-hydrated plugins — preserved details element
+            // still carries listeners wired by its inline settings script
+            // and by screen.js on first load.
+            if (plugin.has_settings && settingsContainer && !alreadyHydrated.has(plugin.id)) {
                 const details = document.createElement('details');
                 details.className = 'bg-dark-700/40 border border-gray-800 rounded-xl overflow-hidden group';
+                details.dataset.pluginId = plugin.id;
+                details.dataset.pluginVersion = plugin.version || '';
 
                 const summary = document.createElement('summary');
                 // .plugin-settings-summary class hides the browser's native
@@ -4144,7 +4179,6 @@ async function loadPlugins() {
 
             // Load plugin JS
             if (plugin.has_script) {
-                const loadedScripts = window.slopsmith._loadedPluginScripts || (window.slopsmith._loadedPluginScripts = new Set());
                 const scriptKey = `${plugin.id}@${plugin.version || ''}`;
                 if (!loadedScripts.has(scriptKey)) {
                     await new Promise((resolve, reject) => {
