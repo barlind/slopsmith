@@ -858,6 +858,7 @@ async function showScreen(id) {
             window._juceAudioUrl = null;
         }
         const audio = document.getElementById('audio');
+        if (audio.src || isPlaying) window.slopsmith.emit('song:stop', { time: audio.currentTime || 0, screen: id });
         audio.pause();
         audio.src = '';
         isPlaying = false;
@@ -2913,6 +2914,11 @@ window.slopsmith = Object.assign(new EventTarget(), {
     },
     emit(event, detail) {
         this.dispatchEvent(new CustomEvent(event, { detail }));
+        try {
+            if (String(event || '').startsWith('song:') && this.capabilities?.emitEvent) {
+                this.capabilities.emitEvent('playback', event, detail || {});
+            }
+        } catch (_e) { /* capability observers must not break app events */ }
     },
     on(event, fn, options) { this.addEventListener(event, fn, options); },
     off(event, fn, options) { this.removeEventListener(event, fn, options); },
@@ -2978,9 +2984,18 @@ audio.addEventListener('ended', () => {
     window.slopsmith.isPlaying = false;
     window.slopsmith.emit('song:ended', _songEventPayload());
 });
+let _lastSongPositionEventAt = 0;
+audio.addEventListener('timeupdate', () => {
+    const now = Date.now();
+    if (now - _lastSongPositionEventAt < 250) return;
+    _lastSongPositionEventAt = now;
+    window.slopsmith.emit('song:position-changed', Object.assign(_songEventPayload(), { duration: audio.duration || null }));
+});
 audio.addEventListener('play', () => {
     window.slopsmith.isPlaying = true;
-    window.slopsmith.emit('song:play', _songEventPayload());
+    const payload = _songEventPayload();
+    window.slopsmith.emit('song:play', payload);
+    window.slopsmith.emit('song:resume', payload);
 });
 audio.addEventListener('pause', () => {
     if (!isPlaying) return;
@@ -2993,6 +3008,7 @@ let artAbortController = null;
 
 async function playSong(filename, arrangement) {
     console.log('playSong called:', filename);
+    window.slopsmith.emit('song:loading', { filename, arrangement: arrangement ?? null });
 
     // Cancel any pending art/metadata requests
     if (artAbortController) artAbortController.abort();
@@ -3058,6 +3074,7 @@ async function playSong(filename, arrangement) {
 
 async function changeArrangement(index) {
     if (currentFilename) {
+    window.slopsmith.emit('song:arrangement-changed', { filename: currentFilename, arrangement: index });
         const wasPlaying = isPlaying;
         const time = _audioTime();
         if (isPlaying) {
@@ -5014,6 +5031,46 @@ async function waitForPluginStartupComplete(timeoutMs = 180000) {
 }
 
 let _loadPluginsInFlight = false;
+const _pluginUiContributions = new Map();
+
+async function _commandUiDomain(domain, command, plugin, payload) {
+    try {
+        if (!window.slopsmith?.capabilities?.command) return;
+        await window.slopsmith.capabilities.command(domain, command, {
+            requester: plugin.id || 'plugin',
+            target: { id: payload.id, pluginId: plugin.id, region: payload.region },
+            payload: { ...payload, pluginId: plugin.id },
+        });
+    } catch (e) {
+        console.warn(`ui contribution ${command} failed for ${plugin.id}:`, e);
+    }
+}
+
+async function _registerLegacyPluginUiContributions(plugin) {
+    const previous = _pluginUiContributions.get(plugin.id) || [];
+    for (const contribution of previous) {
+        await _commandUiDomain(contribution.domain, 'unmount', plugin, contribution);
+    }
+    const contributions = [];
+    if (plugin.nav) {
+        contributions.push({ domain: 'ui.navigation', id: `${plugin.id}:nav`, region: 'plugins', label: plugin.nav.label || plugin.name || plugin.id, mounted: true });
+    }
+    if (plugin.has_screen) {
+        contributions.push({ domain: 'ui.plugin-screens', id: `${plugin.id}:screen`, region: 'plugin-screens', label: plugin.name || plugin.id, mounted: true });
+    }
+    if (plugin.has_settings) {
+        contributions.push({ domain: 'settings', id: `${plugin.id}:settings`, region: 'plugin-settings', label: plugin.name || plugin.id, mounted: true });
+    }
+    if (plugin.type === 'visualization') {
+        contributions.push({ domain: 'ui.player-overlays', id: `${plugin.id}:visualization`, region: 'visualization-picker', label: plugin.name || plugin.id, mounted: true });
+    }
+    contributions.sort((a, b) => `${a.domain}:${a.id}`.localeCompare(`${b.domain}:${b.id}`));
+    _pluginUiContributions.set(plugin.id, contributions);
+    for (const contribution of contributions) {
+        await _commandUiDomain(contribution.domain, 'register-contribution', plugin, contribution);
+        await _commandUiDomain(contribution.domain, 'mount', plugin, contribution);
+    }
+}
 
 async function loadPlugins() {
     if (_loadPluginsInFlight) { console.log('[slopsmith] loadPlugins: in-flight, skipping'); return null; }
@@ -5028,7 +5085,17 @@ async function loadPlugins() {
     try {
         const resp = await fetch('/api/plugins');
         plugins = await resp.json();
+        plugins = plugins.slice().sort((a, b) => String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
         console.log('[slopsmith] loadPlugins: got', plugins.length, 'plugins');
+
+        try {
+            if (window.slopsmith?.capabilities?.registerParticipants) {
+                window.slopsmith.capabilities.registerParticipants(plugins);
+                window.slopsmith.capabilities.validateRuntime?.({ phase: 'plugin-manifest-load' });
+            }
+        } catch (e) {
+            console.warn('[slopsmith] capability manifest registration failed:', e);
+        }
 
         const settingsContainer = document.getElementById('plugin-settings');
 
@@ -5160,7 +5227,8 @@ async function loadPlugins() {
 
         for (const plugin of plugins) {
             try {
-            const screenId = `plugin-${plugin.id}`;
+                await _registerLegacyPluginUiContributions(plugin);
+                const screenId = `plugin-${plugin.id}`;
 
             // Inject screen container. Skip for already-hydrated plugins —
             // their existing screen DOM still has the listeners that

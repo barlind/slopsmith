@@ -262,6 +262,14 @@ Routes are registered under `/api/plugins/{plugin_id}/` to avoid conflicts.
 - `screen.js` — JavaScript loaded after the HTML. Has access to all core functions (`showScreen()`, `esc()`, `formatTime()`, etc.).
 - `settings.html` — HTML fragment injected into the Settings page.
 
+### Plugin Capability Pipelines
+
+Plugins can declare runtime capability domains in `plugin.json` so profiles, diagnostics, and other plugins can reason about provider/requester relationships without private globals. Core registers manifest declarations before plugin scripts hydrate; runtime owners then attach command handlers through `window.slopsmith.capabilities`.
+
+The public flow for cross-plugin automation is claim, dispatch, then release. For example, NAM claims `stems` while AMP is enabled, dispatches `stems.mute` for the guitar target, and releases the claim when AMP stops. Stems owns the mute/restore snapshots and records manual overrides so a user stem toggle wins over automation for the current session.
+
+See [docs/plugin-capability-domains.md](docs/plugin-capability-domains.md) for manifest fields, runtime registration, diagnostics, idempotent hydration rules, and validation commands.
+
 ### Available Plugins
 
 | Plugin | Description | Install |

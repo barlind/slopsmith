@@ -2580,6 +2580,56 @@ def test_list_plugins_version_field(tmp_path, reset_plugin_state):
         client.close()
 
 
+def test_list_plugins_exposes_profile_domain_manifest_metadata(tmp_path, reset_plugin_state):
+    plugins_mod = reset_plugin_state
+    plugin_dir = tmp_path / "declared"
+    plugin_dir.mkdir()
+    manifest = {
+        "id": "declared",
+        "name": "Declared",
+        "nav": "Declared",
+        "screen": "screen.html",
+        "settings": "settings.html",
+        "type": "visualization",
+        "routes": "routes.py",
+        "standards": ["capability-pipelines.v1", "profiles.v1", 42, ""],
+        "capabilities": {"profiles": {"roles": ["observer"]}},
+        "settings_schema": {"schema_version": "1", "packable_keys": ["gain"]},
+        "ui": {"ui.player-controls": [{"id": "declared-control"}]},
+        "domains": {"jobs": [{"id": "declared-job"}], "tempo-clock": {"role": "observer"}},
+    }
+    plugins_mod.LOADED_PLUGINS.append({
+        "id": "declared",
+        "name": "Declared",
+        "nav": "Declared",
+        "type": "visualization",
+        "has_screen": True,
+        "has_script": False,
+        "has_settings": True,
+        "has_tour": False,
+        "_dir": plugin_dir,
+        "_manifest": manifest,
+    })
+
+    client = _make_api_client(plugins_mod)
+    try:
+        response = client.get("/api/plugins")
+        assert response.status_code == 200
+        plugin = response.json()[0]
+        assert plugin["standards"] == ["capability-pipelines.v1", "profiles.v1"]
+        assert plugin["capabilities"] == {"profiles": {"roles": ["observer"]}}
+        assert plugin["settings_schema"] == {"schema_version": "1", "packable_keys": ["gain"]}
+        assert plugin["ui_contributions"]["declared"] == {"ui.player-controls": [{"id": "declared-control"}]}
+        assert {item["legacy_source"] for item in plugin["ui_contributions"]["legacy"]} == {"nav", "screen", "settings", "type"}
+        assert plugin["runtime_domains"] == {
+            "backend.routes": {"legacy_source": "routes"},
+            "jobs": [{"id": "declared-job"}],
+            "tempo-clock": {"role": "observer"},
+        }
+    finally:
+        client.close()
+
+
 def test_tour_json_serves_file(tour_client):
     """GET /api/plugins/{id}/tour.json returns file content as JSON for a plugin with a tour."""
     client, _ = tour_client

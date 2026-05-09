@@ -57,6 +57,52 @@ def _safe_plugin_id_for_module_name(plugin_id: str) -> str:
     return plugin_id.replace("_", "_5f_").replace(".", "_2e_")
 
 
+def _normalize_string_list(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
+
+
+def _normalize_manifest_mapping(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _normalize_manifest_sequence(value) -> list:
+    return value if isinstance(value, list) else []
+
+
+def _normalize_ui_contributions(manifest: dict) -> dict:
+    declared = _normalize_manifest_mapping(manifest.get("ui"))
+    legacy = []
+    if manifest.get("nav"):
+        legacy.append({"region": "ui.navigation", "legacy_source": "nav"})
+    if manifest.get("screen"):
+        legacy.append({"region": "ui.plugin-screens", "legacy_source": "screen"})
+    if manifest.get("settings"):
+        legacy.append({"region": "settings", "legacy_source": "settings"})
+    if manifest.get("type") == "visualization":
+        legacy.append({"region": "visualization", "legacy_source": "type"})
+    return {"declared": declared, "legacy": legacy}
+
+
+def _normalize_runtime_domains(manifest: dict) -> dict:
+    domains = _normalize_manifest_mapping(manifest.get("domains"))
+    reserved = {}
+    for key in (
+        "backend.routes",
+        "jobs",
+        "midi-control",
+        "audio-input",
+        "note-detection",
+        "tempo-clock",
+    ):
+        if key in domains:
+            reserved[key] = domains[key]
+    if manifest.get("routes") and "backend.routes" not in reserved:
+        reserved["backend.routes"] = {"legacy_source": "routes"}
+    return reserved
+
+
 def _load_plugin_sibling(plugin_id: str, plugin_dir: Path, name: str):
     """Load a sibling module from a plugin's directory under a namespaced
     module name (`plugin_<plugin_id>.<name>`, with plugin_id
@@ -924,6 +970,11 @@ def load_plugins(app: FastAPI, context: dict, progress_cb=None, route_setup_fn=N
             "has_script": bool(manifest.get("script")),
             "has_settings": bool(manifest.get("settings")),
             "has_tour": _is_valid_tour_manifest(manifest.get("tour")),
+            "standards": _normalize_string_list(manifest.get("standards")),
+            "capabilities": _normalize_manifest_mapping(manifest.get("capabilities")),
+            "settings_schema": _normalize_manifest_mapping(manifest.get("settings_schema")),
+            "ui_contributions": _normalize_ui_contributions(manifest),
+            "runtime_domains": _normalize_runtime_domains(manifest),
             # Normalized list of relpaths under CONFIG_DIR that this
             # plugin opts in to settings export/import. Empty for
             # plugins that don't declare `settings.server_files`. See
@@ -1138,6 +1189,11 @@ def load_plugins(app: FastAPI, context: dict, progress_cb=None, route_setup_fn=N
                 "has_script": bool(ev_manifest.get("script")),
                 "has_settings": bool(ev_manifest.get("settings")),
                 "has_tour": _is_valid_tour_manifest(ev_manifest.get("tour")),
+                "standards": _normalize_string_list(ev_manifest.get("standards")),
+                "capabilities": _normalize_manifest_mapping(ev_manifest.get("capabilities")),
+                "settings_schema": _normalize_manifest_mapping(ev_manifest.get("settings_schema")),
+                "ui_contributions": _normalize_ui_contributions(ev_manifest),
+                "runtime_domains": _normalize_runtime_domains(ev_manifest),
                 "_export_paths": _normalize_export_paths(ev_manifest.get("settings"), evicted_id),
                 "_diagnostics_paths": _normalize_diagnostics_paths(ev_manifest.get("diagnostics"), evicted_id),
                 "_diagnostics_callable_spec": _parse_diagnostics_callable(ev_manifest.get("diagnostics"), evicted_id),
@@ -1252,6 +1308,11 @@ def register_plugin_api(app: FastAPI):
                 "has_script": p["has_script"],
                 "has_settings": p["has_settings"],
                 "has_tour": p.get("has_tour", False),
+                "standards": p.get("standards") or _normalize_string_list((p.get("_manifest") or {}).get("standards")),
+                "capabilities": p.get("capabilities") or _normalize_manifest_mapping((p.get("_manifest") or {}).get("capabilities")),
+                "settings_schema": p.get("settings_schema") or _normalize_manifest_mapping((p.get("_manifest") or {}).get("settings_schema")),
+                "ui_contributions": p.get("ui_contributions") or _normalize_ui_contributions(p.get("_manifest") or {}),
+                "runtime_domains": p.get("runtime_domains") or _normalize_runtime_domains(p.get("_manifest") or {}),
             }
             for p in snapshot
         ]

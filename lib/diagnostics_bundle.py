@@ -433,6 +433,21 @@ def _system_plugins(loaded_plugins: list[dict], plugins_root: "Path | list[Path]
             ),
             "dir": plugin_dir.name if isinstance(plugin_dir, Path) else None,
         }
+        standards = [item for item in manifest.get("standards", []) if isinstance(item, str) and item]
+        if standards:
+            entry["standards"] = standards
+        if isinstance(manifest.get("settings_schema"), dict):
+            entry["settings_schema"] = manifest.get("settings_schema")
+        declared_ui = manifest.get("ui_contributions") if isinstance(manifest.get("ui_contributions"), dict) else manifest.get("ui")
+        if isinstance(declared_ui, dict):
+            entry["ui_contributions"] = declared_ui
+        runtime_domains = manifest.get("runtime_domains") if isinstance(manifest.get("runtime_domains"), dict) else manifest.get("domains")
+        if isinstance(runtime_domains, dict):
+            entry["runtime_domains"] = dict(runtime_domains)
+        elif manifest.get("routes"):
+            entry["runtime_domains"] = {}
+        if manifest.get("routes"):
+            entry.setdefault("runtime_domains", {}).setdefault("backend.routes", {"legacy_source": "routes"})
         if isinstance(plugin_dir, Path):
             git = _git_info(plugin_dir)
             if git is not None:
@@ -894,7 +909,7 @@ def _client_section(
         # The browser always sends a dict, but the defensive non-dict branch
         # wraps unexpected payloads in {"data": ...} to produce valid JSON
         # rather than crashing — browser input is untrusted.
-        hw_data = dict(client_hardware) if isinstance(client_hardware, dict) else {"data": client_hardware}
+        hw_data: dict[str, object] = dict(client_hardware) if isinstance(client_hardware, dict) else {"data": client_hardware}
         hw_data.setdefault("schema", "client.hardware.v1")
         out["client/hardware.json"] = _safe_json_dumps(hw_data).encode("utf-8")
     if client_ua is not None:

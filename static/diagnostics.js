@@ -310,6 +310,22 @@
         return Object.assign({}, contributions);
     }
 
+
+    function summarizeRuntimeDomains(snapshot) {
+        const plugins = snapshot && Array.isArray(snapshot.plugins) ? snapshot.plugins : [];
+        return plugins.reduce((summary, plugin) => {
+            const ui = plugin && plugin.ui_contributions && typeof plugin.ui_contributions === 'object'
+                ? Object.keys(plugin.ui_contributions).length : 0;
+            const domains = plugin && plugin.runtime_domains && typeof plugin.runtime_domains === 'object'
+                ? Object.keys(plugin.runtime_domains).length : 0;
+            return {
+                plugin_count: summary.plugin_count + 1,
+                ui_contribution_count: summary.ui_contribution_count + ui,
+                runtime_domain_count: summary.runtime_domain_count + domains,
+            };
+        }, { plugin_count: 0, ui_contribution_count: 0, runtime_domain_count: 0 });
+    }
+
     window.slopsmith = window.slopsmith || {};
     window.slopsmith.diagnostics = {
         snapshot: snapshotConsole,
@@ -318,6 +334,7 @@
         snapshotUa,
         snapshotLocalStorage,
         snapshotContributions,
+        summarizeRuntimeDomains,
         contribute,
     };
 })();
