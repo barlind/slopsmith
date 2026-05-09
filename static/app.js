@@ -3954,17 +3954,40 @@ async function loadPlugins() {
 
         const settingsContainer = document.getElementById('plugin-settings');
 
-        // Plugins whose screen.js has already been evaluated this session at
-        // the current version. Their listeners were bound to the existing
-        // settings / screen DOM, so we must preserve that DOM — the script
-        // load guard below skips re-evaluating screen.js, and a fresh empty
-        // DOM with no listeners would leave the plugin half-hydrated on
-        // subsequent loadPlugins() calls (e.g. _scheduleStartupRehydration).
+        // Plugins whose screen.js has already been evaluated this session
+        // at the current version AND whose DOM is still in the document.
+        // Their listeners were bound to the existing settings / screen DOM,
+        // so we must preserve that DOM — the script load guard below skips
+        // re-evaluating screen.js, and a fresh empty DOM with no listeners
+        // would leave the plugin half-hydrated on subsequent loadPlugins()
+        // calls (e.g. _scheduleStartupRehydration).
+        //
+        // The DOM-existence check is the safety net for plugins that
+        // disappeared and reappeared between calls (uninstall + reinstall,
+        // or a backend snapshot churn that drops a plugin then restores
+        // it). In that case the loadedScripts key would still be set, but
+        // any listeners are bound to elements that have since been removed
+        // — drop the stale key so screen.js re-runs against the fresh DOM
+        // we're about to inject.
         const loadedScripts = window.slopsmith._loadedPluginScripts || (window.slopsmith._loadedPluginScripts = new Set());
+        const existingSettingsByPluginId = new Map();
+        if (settingsContainer) {
+            for (const child of settingsContainer.children) {
+                const pid = child.dataset ? child.dataset.pluginId : null;
+                if (pid) existingSettingsByPluginId.set(pid, child);
+            }
+        }
         const alreadyHydrated = new Set();
         for (const p of plugins) {
-            if (p.has_script && loadedScripts.has(`${p.id}@${p.version || ''}`)) {
+            if (!p.has_script) continue;
+            const key = `${p.id}@${p.version || ''}`;
+            if (!loadedScripts.has(key)) continue;
+            const screenOk = !p.has_screen || !!document.getElementById(`plugin-${p.id}`);
+            const settingsOk = !p.has_settings || existingSettingsByPluginId.has(p.id);
+            if (screenOk && settingsOk) {
                 alreadyHydrated.add(p.id);
+            } else {
+                loadedScripts.delete(key);
             }
         }
 
