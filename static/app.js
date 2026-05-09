@@ -3995,10 +3995,12 @@ async function loadPlugins() {
                 // Remove the orphaned <script> tag for this plugin so that
                 // multiple disappear/reappear cycles in one session don't
                 // accumulate stale <script data-plugin-id=...> nodes in
-                // the DOM.
-                document.querySelectorAll(
-                    `script[data-plugin-id="${CSS.escape(p.id)}"]`
-                ).forEach((s) => s.remove());
+                // the DOM. Filter via dataset rather than a CSS attribute
+                // selector — CSS.escape is not universally available in
+                // older runtimes / non-browser test contexts.
+                document.querySelectorAll('script[data-plugin-id]').forEach((s) => {
+                    if (s.dataset.pluginId === p.id) s.remove();
+                });
             }
         }
 
