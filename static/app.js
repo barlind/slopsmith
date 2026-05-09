@@ -4144,13 +4144,19 @@ async function loadPlugins() {
 
             // Load plugin JS
             if (plugin.has_script) {
-                await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = `/api/plugins/${plugin.id}/screen.js`;
-                    script.onload = resolve;
-                    script.onerror = reject;
-                    document.body.appendChild(script);
-                });
+                const loadedScripts = window.slopsmith._loadedPluginScripts || (window.slopsmith._loadedPluginScripts = new Set());
+                const scriptKey = `${plugin.id}@${plugin.version || ''}`;
+                if (!loadedScripts.has(scriptKey)) {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = `/api/plugins/${plugin.id}/screen.js`;
+                        script.dataset.pluginId = plugin.id;
+                        script.dataset.pluginVersion = plugin.version || '';
+                        script.onload = () => { loadedScripts.add(scriptKey); resolve(); };
+                        script.onerror = (err) => { loadedScripts.delete(scriptKey); reject(err); };
+                        document.body.appendChild(script);
+                    });
+                }
             }
             } catch (e) {
                 console.warn(`Plugin '${plugin.id}' failed to load, skipping:`, e);
