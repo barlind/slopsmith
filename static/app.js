@@ -3969,11 +3969,25 @@ async function loadPlugins() {
         // any listeners are bound to elements that have since been removed
         // — drop the stale key so screen.js re-runs against the fresh DOM
         // we're about to inject.
-        const loadedScripts = window.slopsmith._loadedPluginScripts || (window.slopsmith._loadedPluginScripts = new Set());
-        // JSON.stringify ensures id and version can't ambiguously merge —
-        // a raw `id@version` concat would collide on `id='a@b', v='c'` vs
-        // `id='a', v='b@c'`. Plugin IDs are not constrained server-side.
-        const _pluginScriptKey = (p) => JSON.stringify([p.id, p.version || '']);
+        // Map<pluginId, version> — one entry per plugin. Storing only the
+        // currently-loaded version (rather than a Set of all (id, version)
+        // pairs ever loaded) means upgrade → downgrade → upgrade cycles
+        // within one session don't leave stale keys that could mistakenly
+        // mark an old version as already-hydrated. Coerce a legacy Set, if
+        // present, to an empty Map — the previous shape never shipped.
+        let loadedScripts = window.slopsmith._loadedPluginScripts;
+        if (!(loadedScripts instanceof Map)) {
+            loadedScripts = new Map();
+            window.slopsmith._loadedPluginScripts = loadedScripts;
+        }
+        const _removePluginScriptTags = (pluginId) => {
+            // Filter via dataset rather than a CSS attribute selector —
+            // CSS.escape is not universally available, and plugin IDs
+            // aren't constrained server-side.
+            document.querySelectorAll('script[data-plugin-id]').forEach((s) => {
+                if (s.dataset.pluginId === pluginId) s.remove();
+            });
+        };
         const existingSettingsByPluginId = new Map();
         if (settingsContainer) {
             for (const child of settingsContainer.children) {
@@ -3984,23 +3998,19 @@ async function loadPlugins() {
         const alreadyHydrated = new Set();
         for (const p of plugins) {
             if (!p.has_script) continue;
-            const key = _pluginScriptKey(p);
-            if (!loadedScripts.has(key)) continue;
+            // Version must match exactly — an upgrade / downgrade has to
+            // re-run the new script against fresh DOM.
+            if (loadedScripts.get(p.id) !== (p.version || '')) continue;
             const screenOk = !p.has_screen || !!document.getElementById(`plugin-${p.id}`);
             const settingsOk = !p.has_settings || existingSettingsByPluginId.has(p.id);
             if (screenOk && settingsOk) {
                 alreadyHydrated.add(p.id);
             } else {
-                loadedScripts.delete(key);
-                // Remove the orphaned <script> tag for this plugin so that
-                // multiple disappear/reappear cycles in one session don't
-                // accumulate stale <script data-plugin-id=...> nodes in
-                // the DOM. Filter via dataset rather than a CSS attribute
-                // selector — CSS.escape is not universally available in
-                // older runtimes / non-browser test contexts.
-                document.querySelectorAll('script[data-plugin-id]').forEach((s) => {
-                    if (s.dataset.pluginId === p.id) s.remove();
-                });
+                // DOM was wiped externally (uninstall + reinstall, snapshot
+                // churn) — drop the entry and remove the orphaned <script>
+                // so screen.js re-runs against fresh DOM below.
+                loadedScripts.delete(p.id);
+                _removePluginScriptTags(p.id);
             }
         }
 
@@ -4016,8 +4026,9 @@ async function loadPlugins() {
             });
         }
         document.querySelectorAll('.screen[id^="plugin-"]').forEach((el) => {
-            // Prefer dataset.pluginId (set on injection) — id-prefix parse
-            // would mis-handle a plugin whose id starts with "plugin-".
+            // dataset.pluginId is the source of truth (set on injection);
+            // the id-prefix fallback covers screens injected before this
+            // change shipped — both forms strip a single leading "plugin-".
             const pid = (el.dataset && el.dataset.pluginId)
                 || el.id.replace(/^plugin-/, '');
             if (!alreadyHydrated.has(pid)) el.remove();
@@ -4218,20 +4229,24 @@ async function loadPlugins() {
 
             // Load plugin JS
             if (plugin.has_script) {
-                const scriptKey = _pluginScriptKey(plugin);
-                if (!loadedScripts.has(scriptKey)) {
+                const wantedVersion = plugin.version || '';
+                if (loadedScripts.get(plugin.id) !== wantedVersion) {
+                    // A different version (or none) was loaded previously —
+                    // remove the prior <script> tag for this plugin id so we
+                    // don't accumulate stale versions on upgrade/downgrade.
+                    _removePluginScriptTags(plugin.id);
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
                         // Include version in URL so a plugin upgrade within the
                         // same browser session fetches the new screen.js instead
                         // of a cached copy keyed only by path (matches the art
                         // URL ?v=mtime convention elsewhere in this file).
-                        const v = encodeURIComponent(plugin.version || '');
+                        const v = encodeURIComponent(wantedVersion);
                         script.src = `/api/plugins/${plugin.id}/screen.js${v ? `?v=${v}` : ''}`;
                         script.dataset.pluginId = plugin.id;
-                        script.dataset.pluginVersion = plugin.version || '';
-                        script.onload = () => { loadedScripts.add(scriptKey); resolve(); };
-                        script.onerror = (err) => { loadedScripts.delete(scriptKey); reject(err); };
+                        script.dataset.pluginVersion = wantedVersion;
+                        script.onload = () => { loadedScripts.set(plugin.id, wantedVersion); resolve(); };
+                        script.onerror = (err) => { loadedScripts.delete(plugin.id); reject(err); };
                         document.body.appendChild(script);
                     });
                 }
