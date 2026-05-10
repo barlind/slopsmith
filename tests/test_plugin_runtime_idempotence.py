@@ -75,6 +75,23 @@ def test_capability_registry_exposes_claim_dispatch_and_ready_contracts():
     assert "outcome: 'overridden'" in source
 
 
+def test_playback_capability_wraps_transport_and_highway_surfaces():
+    app_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    capability_source = (ROOT / "static" / "capabilities.js").read_text(encoding="utf-8")
+
+    assert "eventName.startsWith('loop:')" in app_source
+    assert "eventName === 'beats:loaded'" in app_source
+    assert "this.capabilities.emitEvent(capability, event, capabilityDetail)" in app_source
+    assert "seek(seconds, reason) { return _audioSeek(seconds, reason || 'plugin-command'); }" in app_source
+    for token in ["'audio-element'", "'loop-set'", "'loop-clear'", "'loop-get'", "'loop:restart'", "'beats:loaded'"]:
+        assert token in capability_source
+    assert "highway.getAudioElement" in capability_source
+    assert "highway.getTime" in capability_source
+    assert "window.slopsmith.seek(seconds" in capability_source
+    assert "chartT: _chartTime(audioT)" in capability_source
+    assert "loop: _loopSnapshot()" in capability_source
+
+
 def test_plugin_loader_registers_manifest_capability_declarations():
     source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 

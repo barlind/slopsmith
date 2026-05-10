@@ -1053,9 +1053,51 @@
         return result;
     }
 
+    function _highwayApi() {
+        return window.highway && typeof window.highway === 'object' ? window.highway : null;
+    }
+
     function _audioElement() {
+        const highway = _highwayApi();
+        if (highway && typeof highway.getAudioElement === 'function') {
+            try {
+                const element = highway.getAudioElement();
+                if (element) return element;
+            } catch (_) {}
+        }
         if (typeof document === 'undefined' || !document.getElementById) return null;
         return document.getElementById('audio');
+    }
+
+    function _perfNow() {
+        return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+    }
+
+    function _chartTime(fallback = 0) {
+        const highway = _highwayApi();
+        if (highway && typeof highway.getTime === 'function') {
+            try {
+                const chartT = Number(highway.getTime());
+                if (Number.isFinite(chartT)) return chartT;
+            } catch (_) {}
+        }
+        return Number.isFinite(Number(fallback)) ? Number(fallback) : 0;
+    }
+
+    function _loopSnapshot() {
+        const slopsmith = window.slopsmith;
+        if (slopsmith && typeof slopsmith.getLoop === 'function') {
+            try {
+                const loop = slopsmith.getLoop() || {};
+                const loopA = Number(loop.loopA);
+                const loopB = Number(loop.loopB);
+                return {
+                    loopA: Number.isFinite(loopA) ? loopA : null,
+                    loopB: Number.isFinite(loopB) ? loopB : null,
+                };
+            } catch (_) {}
+        }
+        return { loopA: null, loopB: null };
     }
 
     function _playbackDriver() {
@@ -1066,15 +1108,48 @@
 
     function _playbackSnapshot() {
         const driver = _playbackDriver();
-        if (!driver) return { available: false, source: null, currentTime: 0, duration: 0, paused: true };
+        if (!driver) return { available: false, source: null, currentTime: 0, audioT: 0, chartT: _chartTime(0), perfNow: _perfNow(), duration: 0, paused: true, loop: _loopSnapshot() };
         const target = driver.target;
+        const audioT = Number(target.currentTime || 0);
         return {
             available: true,
             source: driver.kind,
-            currentTime: Number(target.currentTime || 0),
+            currentTime: audioT,
+            audioT,
+            chartT: _chartTime(audioT),
+            perfNow: _perfNow(),
             duration: Number(target.duration || 0),
             paused: typeof target.paused === 'boolean' ? target.paused : !target._polling,
+            loop: _loopSnapshot(),
         };
+    }
+
+    function _playbackAudioElementCommand() {
+        const element = _audioElement();
+        if (!element) return _coreDegraded('No playback audio element available', { available: false, element: null });
+        return _coreHandled({ available: true, element, elementId: element.id || 'audio' });
+    }
+
+    async function _playbackLoopCommand(action, ctx = {}) {
+        const slopsmith = window.slopsmith;
+        if (action === 'loop-get') return _coreHandled(_playbackSnapshot());
+        if (!slopsmith) return _coreDegraded('window.slopsmith is unavailable', _playbackSnapshot());
+        if (action === 'loop-clear') {
+            if (typeof slopsmith.clearLoop !== 'function') return _coreDegraded('Playback loop clear API is unavailable', _playbackSnapshot());
+            slopsmith.clearLoop();
+            return _coreHandled(_playbackSnapshot());
+        }
+        if (action === 'loop-set') {
+            if (typeof slopsmith.setLoop !== 'function') return _coreDegraded('Playback loop set API is unavailable', _playbackSnapshot());
+            const payload = ctx.payload || {};
+            const target = ctx.target && typeof ctx.target === 'object' ? ctx.target : {};
+            const a = payload.a ?? payload.loopA ?? payload.start ?? target.a ?? target.loopA ?? target.start;
+            const b = payload.b ?? payload.loopB ?? payload.end ?? target.b ?? target.loopB ?? target.end;
+            const ok = await slopsmith.setLoop(a, b);
+            if (ok === false) return _coreDegraded('Playback loop set did not land on the requested start', _playbackSnapshot());
+            return _coreHandled(_playbackSnapshot());
+        }
+        return _coreDegraded(`Unsupported playback loop command: ${action}`, _playbackSnapshot());
     }
 
     async function _playbackCommand(action, ctx = {}) {
@@ -1093,7 +1168,9 @@
         } else if (action === 'seek') {
             const seconds = Number(payload.seconds ?? payload.time ?? ctx.target);
             if (!Number.isFinite(seconds)) return _coreDegraded('Playback seek requires a numeric seconds value', _playbackSnapshot());
-            if (typeof target.seek === 'function') await target.seek(seconds);
+            if (window.slopsmith && typeof window.slopsmith.seek === 'function') {
+                await window.slopsmith.seek(seconds, payload.reason || ctx.reason || 'capability-command');
+            } else if (typeof target.seek === 'function') await target.seek(seconds);
             else {
                 try { target.currentTime = Math.max(0, seconds); }
                 catch (_) { return _coreDegraded('Playback driver cannot seek', _playbackSnapshot()); }
@@ -1174,14 +1251,18 @@
     registerParticipant('core', {
         playback: {
             roles: ['owner', 'provider'],
-            commands: ['play', 'pause', 'stop', 'seek', 'snapshot'],
-            events: ['song:loading', 'song:play', 'song:ready', 'song:arrangement-changed', 'song:position-changed', 'song:seek', 'song:pause', 'song:resume', 'song:stop', 'song:ended'],
+            commands: ['play', 'pause', 'stop', 'seek', 'snapshot', 'audio-element', 'loop-set', 'loop-clear', 'loop-get'],
+            events: ['song:loading', 'song:play', 'song:ready', 'song:arrangement-changed', 'song:position-changed', 'song:seek', 'song:pause', 'song:resume', 'song:stop', 'song:ended', 'loop:restart', 'beats:loaded'],
             compatibility: 'none',
             handlers: {
                 play: (ctx) => _playbackCommand('play', ctx),
                 pause: (ctx) => _playbackCommand('pause', ctx),
                 stop: (ctx) => _playbackCommand('stop', ctx),
                 seek: (ctx) => _playbackCommand('seek', ctx),
+                'audio-element': () => _playbackAudioElementCommand(),
+                'loop-set': (ctx) => _playbackLoopCommand('loop-set', ctx),
+                'loop-clear': (ctx) => _playbackLoopCommand('loop-clear', ctx),
+                'loop-get': (ctx) => _playbackLoopCommand('loop-get', ctx),
                 snapshot: () => _coreHandled(_playbackSnapshot()),
             },
         },

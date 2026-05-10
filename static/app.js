@@ -2929,9 +2929,11 @@ window.slopsmith = Object.assign(new EventTarget(), {
     emit(event, detail) {
         this.dispatchEvent(new CustomEvent(event, { detail }));
         try {
-            if (String(event || '').startsWith('song:') && this.capabilities?.emitEvent) {
+            const eventName = String(event || '');
+            const capability = (eventName.startsWith('song:') || eventName.startsWith('loop:') || eventName === 'beats:loaded') ? 'playback' : '';
+            if (capability && this.capabilities?.emitEvent) {
                 const capabilityDetail = detail || Object.create(null);
-                this.capabilities.emitEvent('playback', event, capabilityDetail);
+                this.capabilities.emitEvent(capability, event, capabilityDetail);
             }
         } catch (_e) { /* capability observers must not break app events */ }
     },
@@ -2941,6 +2943,7 @@ window.slopsmith = Object.assign(new EventTarget(), {
     // The script-scope `setLoop` and `clearLoop` are hoisted so these
     // method bodies resolve them lexically; `getLoop` reads the live
     // loopA/loopB bindings at call time.
+    seek(seconds, reason) { return _audioSeek(seconds, reason || 'plugin-command'); },
     setLoop(a, b) { return setLoop(a, b); },
     clearLoop() { clearLoop(); },
     getLoop() { return { loopA, loopB }; },

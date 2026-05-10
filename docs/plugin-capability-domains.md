@@ -88,6 +88,33 @@ api.release({ capability: 'stems', claimId: 'nam.amp-active', owner: 'nam_tone' 
 
 Manual user actions win over matching automation claims. For example, Stems records a user override when a player toggles a stem while NAM owns the `nam.amp-active` claim; the registry reports the command as `overridden` and skips re-applying automation for that target. Owners keep restore snapshots for their own surfaces so requesters do not need to read private state.
 
+## Core Playback Adapters
+
+Plugins should prefer the `playback` capability for transport state and control instead of reaching into `window.highway`, player buttons, or private globals. Core owns the direct highway and media-element integration and exposes stable capability commands/events:
+
+```js
+const api = window.slopsmith.capabilities;
+
+api.subscribe('playback:song:seek', event => {
+  if (event.payload.reason === 'loop-wrap') return;
+});
+
+api.subscribe('playback:loop:restart', event => {
+  console.log(event.payload.loopA, event.payload.loopB);
+});
+
+api.subscribe('playback:beats:loaded', event => {
+  console.log(event.payload.count);
+});
+
+const snapshot = await api.command('playback', 'snapshot', { requester: 'my_plugin' });
+await api.command('playback', 'seek', { requester: 'my_plugin', reason: 'section-map', payload: { seconds: 42.0 } });
+await api.command('playback', 'loop-set', { requester: 'my_plugin', payload: { loopA: 12.5, loopB: 24.0 } });
+await api.command('playback', 'loop-clear', { requester: 'my_plugin' });
+```
+
+The `seek` command routes through core's canonical seek funnel, so observers receive `song:seek` with `from`, `to`, and `reason`. The `snapshot` payload includes `audioT`, `chartT`, `perfNow`, `duration`, `paused`, and the current `{ loopA, loopB }`. Plugins that truly need the underlying media element can request `playback.audio-element`; core resolves that through the supported highway accessor internally so plugins do not depend on `window.highway` directly.
+
 ## First-Party Management Plugins
 
 Large management surfaces should prefer plugin-owned UI over crowding normal Settings. A bundled Profile Manager plugin can contribute screens and settings panels for profile, configuration-source, and settings-pack management while core keeps the underlying apply, rollback, trust, and diagnostics services.
