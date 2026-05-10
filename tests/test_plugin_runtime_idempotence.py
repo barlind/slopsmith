@@ -31,6 +31,16 @@ def test_plugin_loader_unmounts_previous_ui_contributions_before_reregistering()
     assert "await _commandUiDomain(contribution.domain, 'mount', plugin, contribution)" in source
 
 
+def test_plugin_loader_unmounts_contributions_for_removed_plugins():
+    source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "const livePluginIds = new Set(plugins.map((plugin) => plugin.id))" in source
+    assert "for (const [pluginId, contributions] of _pluginUiContributions)" in source
+    assert "const stalePlugin = { id: pluginId }" in source
+    assert "await _commandUiDomain(contribution.domain, 'unmount', stalePlugin, contribution)" in source
+    assert "_pluginUiContributions.delete(pluginId)" in source
+
+
 
 def test_capability_visualizer_waits_for_registry_instead_of_hard_error():
     source = _sibling_file("slopsmith-plugin-capability-visualizer", "screen.js").read_text(encoding="utf-8")

@@ -5102,6 +5102,15 @@ async function loadPlugins() {
         const resp = await fetch('/api/plugins');
         plugins = await resp.json();
         plugins = plugins.slice().sort((a, b) => String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
+        const livePluginIds = new Set(plugins.map((plugin) => plugin.id));
+        for (const [pluginId, contributions] of _pluginUiContributions) {
+            if (livePluginIds.has(pluginId)) continue;
+            const stalePlugin = { id: pluginId };
+            for (const contribution of contributions) {
+                await _commandUiDomain(contribution.domain, 'unmount', stalePlugin, contribution);
+            }
+            _pluginUiContributions.delete(pluginId);
+        }
         console.log('[slopsmith] loadPlugins: got', plugins.length, 'plugins');
 
         try {
