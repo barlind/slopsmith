@@ -2930,7 +2930,11 @@ window.slopsmith = Object.assign(new EventTarget(), {
         this.dispatchEvent(new CustomEvent(event, { detail }));
         try {
             const eventName = String(event || '');
-            const capability = (eventName.startsWith('song:') || eventName.startsWith('loop:') || eventName === 'beats:loaded') ? 'playback' : '';
+            let capability = '';
+            if (eventName.startsWith('song:') || eventName.startsWith('loop:') || eventName === 'beats:loaded' || eventName === 'arrangement:changed') capability = 'playback';
+            else if (eventName.startsWith('screen:')) capability = 'ui.navigation';
+            else if (eventName.startsWith('note:')) capability = 'note-detection';
+            else if (eventName.startsWith('viz:') || eventName.startsWith('highway:')) capability = 'visualization';
             if (capability && this.capabilities?.emitEvent) {
                 const capabilityDetail = detail || Object.create(null);
                 this.capabilities.emitEvent(capability, event, capabilityDetail);

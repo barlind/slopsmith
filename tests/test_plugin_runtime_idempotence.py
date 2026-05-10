@@ -81,15 +81,29 @@ def test_playback_capability_wraps_transport_and_highway_surfaces():
 
     assert "eventName.startsWith('loop:')" in app_source
     assert "eventName === 'beats:loaded'" in app_source
+    assert "eventName === 'arrangement:changed'" in app_source
     assert "this.capabilities.emitEvent(capability, event, capabilityDetail)" in app_source
     assert "seek(seconds, reason) { return _audioSeek(seconds, reason || 'plugin-command'); }" in app_source
-    for token in ["'audio-element'", "'loop-set'", "'loop-clear'", "'loop-get'", "'loop:restart'", "'beats:loaded'"]:
+    for token in ["'audio-element'", "'loop-set'", "'loop-clear'", "'loop-get'", "'loop:restart'", "'beats:loaded'", "'arrangement:changed'"]:
         assert token in capability_source
     assert "highway.getAudioElement" in capability_source
     assert "highway.getTime" in capability_source
     assert "window.slopsmith.seek(seconds" in capability_source
     assert "chartT: _chartTime(audioT)" in capability_source
     assert "loop: _loopSnapshot()" in capability_source
+
+
+def test_capability_events_cover_navigation_notes_and_visualization():
+    app_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    capability_source = (ROOT / "static" / "capabilities.js").read_text(encoding="utf-8")
+
+    assert "capability = 'ui.navigation'" in app_source
+    assert "capability = 'note-detection'" in app_source
+    assert "eventName.startsWith('viz:') || eventName.startsWith('highway:')" in app_source
+    for token in ["'navigate'", "'screen:changed'", "function _navigate(", "window.slopsmith.navigate(id, params)"]:
+        assert token in capability_source
+    for token in ["'note:hit'", "'note:miss'", "'viz:renderer:ready'", "'viz:reverted'", "'highway:canvas-replaced'"]:
+        assert token in capability_source
 
 
 def test_plugin_loader_registers_manifest_capability_declarations():

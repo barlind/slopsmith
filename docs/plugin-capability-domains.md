@@ -115,6 +115,26 @@ await api.command('playback', 'loop-clear', { requester: 'my_plugin' });
 
 The `seek` command routes through core's canonical seek funnel, so observers receive `song:seek` with `from`, `to`, and `reason`. The `snapshot` payload includes `audioT`, `chartT`, `perfNow`, `duration`, `paused`, and the current `{ loopA, loopB }`. Plugins that truly need the underlying media element can request `playback.audio-element`; core resolves that through the supported highway accessor internally so plugins do not depend on `window.highway` directly.
 
+## Core Event Bridges
+
+The app event bus still dispatches local `window.slopsmith` events for legacy listeners, and core also forwards cross-plugin event families into capability domains:
+
+- `playback`: `song:*`, `loop:*`, `beats:loaded`, and legacy `arrangement:changed`
+- `ui.navigation`: `screen:changed`
+- `note-detection`: `note:hit` and `note:miss`
+- `visualization`: `viz:*` and `highway:*`
+
+New code should subscribe through capability events when it needs a cross-plugin contract. For navigation, plugins can request a screen change without wrapping `window.showScreen`:
+
+```js
+await window.slopsmith.capabilities.command('ui.navigation', 'navigate', {
+  requester: 'my_plugin',
+  target: { screenId: 'player' },
+});
+```
+
+The direct `window.highway` object remains the renderer data plane for now. Per-frame reads such as notes, chords, beats, and renderer hooks should not be moved behind asynchronous capability commands until there is a dedicated chart/render facade.
+
 ## First-Party Management Plugins
 
 Large management surfaces should prefer plugin-owned UI over crowding normal Settings. A bundled Profile Manager plugin can contribute screens and settings panels for profile, configuration-source, and settings-pack management while core keeps the underlying apply, rollback, trust, and diagnostics services.

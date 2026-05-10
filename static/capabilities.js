@@ -1214,6 +1214,23 @@
         return _coreHandled(_visualizationSnapshot());
     }
 
+    function _navigate(ctx = {}) {
+        const payload = ctx.payload && typeof ctx.payload === 'object' ? ctx.payload : {};
+        const target = ctx.target && typeof ctx.target === 'object' ? ctx.target : {};
+        const id = payload.screenId || payload.screen || target.screenId || target.screen || target.id || (typeof ctx.target === 'string' ? ctx.target : '');
+        if (!id) return _coreDegraded('Navigation requires a screen id', { id: null });
+        const params = payload.params && typeof payload.params === 'object' ? payload.params : (target.params && typeof target.params === 'object' ? target.params : {});
+        if (window.slopsmith && typeof window.slopsmith.navigate === 'function') {
+            window.slopsmith.navigate(id, params);
+            return _coreHandled({ id, params });
+        }
+        if (typeof window.showScreen === 'function') {
+            window.showScreen(id);
+            return _coreHandled({ id, params: {} });
+        }
+        return _coreDegraded('Navigation API is unavailable', { id, params });
+    }
+
     const uiControlContributions = [];
     const uiPanelContributions = [];
     const uiNavigationContributions = [];
@@ -1252,7 +1269,7 @@
         playback: {
             roles: ['owner', 'provider'],
             commands: ['play', 'pause', 'stop', 'seek', 'snapshot', 'audio-element', 'loop-set', 'loop-clear', 'loop-get'],
-            events: ['song:loading', 'song:play', 'song:ready', 'song:arrangement-changed', 'song:position-changed', 'song:seek', 'song:pause', 'song:resume', 'song:stop', 'song:ended', 'loop:restart', 'beats:loaded'],
+            events: ['song:loading', 'song:play', 'song:ready', 'song:arrangement-changed', 'arrangement:changed', 'song:position-changed', 'song:seek', 'song:pause', 'song:resume', 'song:stop', 'song:ended', 'loop:restart', 'beats:loaded'],
             compatibility: 'none',
             handlers: {
                 play: (ctx) => _playbackCommand('play', ctx),
@@ -1294,7 +1311,8 @@
         },
         'ui.navigation': {
             roles: ['owner', 'provider'],
-            commands: ['register-contribution', 'mount', 'unmount', 'set-visible', 'reorder-by-policy', 'inspect'],
+            commands: ['register-contribution', 'mount', 'unmount', 'set-visible', 'reorder-by-policy', 'navigate', 'inspect'],
+            events: ['screen:changed'],
             compatibility: 'none',
             handlers: {
                 'register-contribution': (ctx) => _rememberUiContributionCommand('ui.navigation', 'register-contribution', ctx),
@@ -1302,6 +1320,7 @@
                 unmount: (ctx) => _rememberUiContributionCommand('ui.navigation', 'unmount', ctx),
                 'set-visible': (ctx) => _rememberUiContributionCommand('ui.navigation', 'set-visible', ctx),
                 'reorder-by-policy': (ctx) => _rememberUiContributionCommand('ui.navigation', 'reorder-by-policy', ctx),
+                navigate: (ctx) => _navigate(ctx),
                 inspect: (ctx) => _rememberUiContributionCommand('ui.navigation', 'inspect', ctx),
             },
         },
@@ -1497,7 +1516,7 @@
         'note-detection': {
             roles: ['owner', 'provider'],
             commands: ['register', 'inspect'],
-            events: ['note.detected', 'participant.registered'],
+            events: ['note.detected', 'note:hit', 'note:miss', 'participant.registered'],
             compatibility: 'degrade-noop',
             handlers: {
                 register: (ctx) => _rememberCoreDomainCommand('note-detection', ctx),
@@ -1517,7 +1536,7 @@
         visualization: {
             roles: ['owner', 'provider'],
             commands: ['register-provider', 'get-current', 'set-renderer'],
-            events: ['renderer:ready', 'reverted'],
+            events: ['renderer:ready', 'reverted', 'viz:renderer:ready', 'viz:reverted', 'highway:canvas-replaced'],
             compatibility: 'shim-allowed',
             handlers: {
                 'register-provider': (ctx) => {
