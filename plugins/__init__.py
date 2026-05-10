@@ -72,7 +72,10 @@ def _normalize_manifest_sequence(value) -> list:
 
 
 def _normalize_ui_contributions(manifest: dict) -> dict:
-    declared = _normalize_manifest_mapping(manifest.get("ui"))
+    declared = {
+        **_normalize_manifest_mapping(manifest.get("ui_contributions")),
+        **_normalize_manifest_mapping(manifest.get("ui")),
+    }
     legacy = []
     if manifest.get("nav"):
         legacy.append({"region": "ui.navigation", "legacy_source": "nav"})
@@ -86,21 +89,13 @@ def _normalize_ui_contributions(manifest: dict) -> dict:
 
 
 def _normalize_runtime_domains(manifest: dict) -> dict:
-    domains = _normalize_manifest_mapping(manifest.get("domains"))
-    reserved = {}
-    for key in (
-        "backend.routes",
-        "jobs",
-        "midi-control",
-        "audio-input",
-        "note-detection",
-        "tempo-clock",
-    ):
-        if key in domains:
-            reserved[key] = domains[key]
-    if manifest.get("routes") and "backend.routes" not in reserved:
-        reserved["backend.routes"] = {"legacy_source": "routes"}
-    return reserved
+    domains = {
+        **_normalize_manifest_mapping(manifest.get("runtime_domains")),
+        **_normalize_manifest_mapping(manifest.get("domains")),
+    }
+    if manifest.get("routes"):
+        domains.setdefault("backend.routes", {"legacy_source": "routes"})
+    return domains
 
 
 def _load_plugin_sibling(plugin_id: str, plugin_dir: Path, name: str):

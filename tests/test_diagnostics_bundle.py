@@ -513,6 +513,24 @@ def test_preview_suppresses_callable_spec(tmp_path):
     assert called == [], "preview_bundle must not execute _diagnostics_callable_spec callables"
 
 
+def test_system_plugins_exports_manifest_capability_declarations(tmp_path):
+    plugin_dir = tmp_path / "capable"
+    plugin_dir.mkdir()
+    loaded_plugins = [{
+        "id": "capable",
+        "name": "Capable",
+        "_dir": plugin_dir,
+        "_manifest": {
+            "version": "1.0.0",
+            "capabilities": {"stems": {"roles": ["requester", "observer"]}},
+        },
+    }]
+
+    result = db._system_plugins(loaded_plugins, plugins_root=tmp_path)
+
+    assert result["plugins"][0]["capabilities"] == {"stems": {"roles": ["requester", "observer"]}}
+
+
 def test_system_plugins_multi_root_scans_all(tmp_path):
     """_system_plugins accepts a list of roots and scans all for orphans."""
     root1 = tmp_path / "plugins1"

@@ -258,6 +258,17 @@
         const baseOrder = new Map(ids.map((id, idx) => [id, idx]));
         const queue = ids.filter(id => indegree.get(id) === 0)
             .sort((a, b) => baseOrder.get(a) - baseOrder.get(b));
+        const insertByBaseOrder = (id) => {
+            const rank = baseOrder.get(id);
+            let low = 0;
+            let high = queue.length;
+            while (low < high) {
+                const mid = (low + high) >>> 1;
+                if (baseOrder.get(queue[mid]) < rank) low = mid + 1;
+                else high = mid;
+            }
+            queue.splice(low, 0, id);
+        };
         const resolved = [];
         while (queue.length) {
             const id = queue.shift();
@@ -265,8 +276,7 @@
             for (const next of edges.get(id) || []) {
                 indegree.set(next, indegree.get(next) - 1);
                 if (indegree.get(next) === 0) {
-                    queue.push(next);
-                    queue.sort((a, b) => baseOrder.get(a) - baseOrder.get(b));
+                    insertByBaseOrder(next);
                 }
             }
         }
@@ -890,8 +900,10 @@
             activeClaims: Array.from(activeClaims.values()),
             knownPlugins: Array.from(knownPlugins.values()).map(_knownPluginSummary),
         };
-        while (snapshot.recentDecisions.length && JSON.stringify(snapshot).length > MAX_SNAPSHOT_BYTES) {
-            snapshot.recentDecisions.shift();
+        let currentSize = JSON.stringify(snapshot).length;
+        while (snapshot.recentDecisions.length && currentSize > MAX_SNAPSHOT_BYTES) {
+            const removedDecision = snapshot.recentDecisions.shift();
+            currentSize -= JSON.stringify(removedDecision).length;
         }
         return _safeValue(snapshot);
     }

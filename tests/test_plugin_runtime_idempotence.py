@@ -1,8 +1,17 @@
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = ROOT.parent
+
+
+def _sibling_file(plugin_dir: str, filename: str) -> Path:
+    path = WORKSPACE_ROOT / plugin_dir / filename
+    if not path.exists():
+        pytest.skip(f"requires sibling plugin checkout: {plugin_dir}/{filename}")
+    return path
 
 
 def test_plugin_loader_guards_duplicate_hydration_and_scripts():
@@ -24,7 +33,7 @@ def test_plugin_loader_unmounts_previous_ui_contributions_before_reregistering()
 
 
 def test_capability_visualizer_waits_for_registry_instead_of_hard_error():
-    source = (WORKSPACE_ROOT / "slopsmith-plugin-capability-visualizer" / "screen.js").read_text(encoding="utf-8")
+    source = _sibling_file("slopsmith-plugin-capability-visualizer", "screen.js").read_text(encoding="utf-8")
 
     assert "scheduleRegistryRetry" in source
     assert "Capability runtime is loading..." in source
@@ -57,8 +66,8 @@ def test_plugin_loader_registers_manifest_capability_declarations():
 
 
 def test_nam_and_stems_use_owner_claim_dispatch_semantics():
-    nam_source = (WORKSPACE_ROOT / "slopsmith-plugin-nam-tone" / "screen.js").read_text(encoding="utf-8")
-    stems_source = (WORKSPACE_ROOT / "slopsmith-plugin-stems" / "screen.js").read_text(encoding="utf-8")
+    nam_source = _sibling_file("slopsmith-plugin-nam-tone", "screen.js").read_text(encoding="utf-8")
+    stems_source = _sibling_file("slopsmith-plugin-stems", "screen.js").read_text(encoding="utf-8")
 
     assert "NAM_STEM_CLAIM_ID = 'nam.amp-active'" in nam_source
     assert "api.claim({ capability: 'stems'" in nam_source
@@ -75,8 +84,8 @@ def test_nam_and_stems_use_owner_claim_dispatch_semantics():
 
 
 def test_nam_screen_uses_stable_singleton_hooks_for_rehydration():
-    source = (WORKSPACE_ROOT / "slopsmith-plugin-nam-tone" / "screen.js").read_text(encoding="utf-8")
-    manifest = (WORKSPACE_ROOT / "slopsmith-plugin-nam-tone" / "plugin.json").read_text(encoding="utf-8")
+    source = _sibling_file("slopsmith-plugin-nam-tone", "screen.js").read_text(encoding="utf-8")
+    manifest = _sibling_file("slopsmith-plugin-nam-tone", "plugin.json").read_text(encoding="utf-8")
 
     assert "plugin-runtime-idempotent.v1" in manifest
     assert "capability-pipelines.v1" in manifest
@@ -86,8 +95,8 @@ def test_nam_screen_uses_stable_singleton_hooks_for_rehydration():
 
 
 def test_stems_screen_uses_stable_singleton_hooks_for_rehydration():
-    source = (WORKSPACE_ROOT / "slopsmith-plugin-stems" / "screen.js").read_text(encoding="utf-8")
-    manifest = (WORKSPACE_ROOT / "slopsmith-plugin-stems" / "plugin.json").read_text(encoding="utf-8")
+    source = _sibling_file("slopsmith-plugin-stems", "screen.js").read_text(encoding="utf-8")
+    manifest = _sibling_file("slopsmith-plugin-stems", "plugin.json").read_text(encoding="utf-8")
 
     assert "plugin-runtime-idempotent.v1" in manifest
     assert "capability-pipelines.v1" in manifest

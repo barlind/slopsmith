@@ -119,5 +119,5 @@ node --check static/diagnostics.js
 node --check ../slopsmith-plugin-capability-visualizer/screen.js
 node --check ../slopsmith-plugin-stems/screen.js
 node --check ../slopsmith-plugin-nam-tone/screen.js
-.venv/bin/python -m pytest tests/test_profile_domains.py tests/test_plugin_runtime_idempotence.py tests/test_plugins.py tests/test_profile_diagnostics.py -q
+pytest tests/test_profile_domains.py tests/test_plugin_runtime_idempotence.py tests/test_plugins.py tests/test_profile_diagnostics.py -q
 ```

@@ -833,6 +833,7 @@ async function showScreen(id) {
         loadSettings();
     }
     if (id !== 'player') {
+        const stopTime = _audioTime();
         highway.stop();
         // Cancel any queued seeks, in-flight shim closures, AND active
         // count-in timers before stopping playback so none of these paths
@@ -858,7 +859,7 @@ async function showScreen(id) {
             window._juceAudioUrl = null;
         }
         const audio = document.getElementById('audio');
-        if (audio.src || isPlaying) window.slopsmith.emit('song:stop', { time: audio.currentTime || 0, screen: id });
+        if (audio.src || isPlaying) window.slopsmith.emit('song:stop', { time: stopTime || 0, screen: id });
         audio.pause();
         audio.src = '';
         isPlaying = false;
@@ -2546,6 +2547,15 @@ function retuneSong(filename, title, tuning, target) {
 // ── Player ───────────────────────────────────────────────────────────────
 const audio = document.getElementById('audio');
 let isPlaying = false;
+let _lastSongPositionEventAt = 0;
+
+function _emitSongPositionChanged(time, duration) {
+    const now = Date.now();
+    if (now - _lastSongPositionEventAt < 250) return;
+    _lastSongPositionEventAt = now;
+    const payload = (typeof _songEventPayload === 'function') ? _songEventPayload() : { time };
+    window.slopsmith.emit('song:position-changed', Object.assign(payload, { duration }));
+}
 
 // In Slopsmith Desktop, WASAPI Exclusive Mode locks the audio device so Chromium
 // cannot play through it. When window._juceMode is true, song audio is routed
@@ -2611,6 +2621,7 @@ const jucePlayer = {
                 try {
                     self._pos = await window.slopsmithDesktop.audio.getBackingPosition();
                     self._pollAt = performance.now();
+                    _emitSongPositionChanged(self.currentTime, self.duration || null);
                 } catch (err) {
                     console.warn('[jucePlayer] position poll failed:', err);
                 } finally {
@@ -2784,7 +2795,9 @@ let _resetJuceAudioShimChain = function () {};
                 const sm = window.slopsmith;
                 if (sm) {
                     sm.isPlaying = true;
-                    sm.emit('song:play', _songEventPayload());
+                    const payload = _songEventPayload();
+                    sm.emit('song:play', payload);
+                    sm.emit('song:resume', payload);
                 }
             });
             return p.then(() => undefined);
@@ -2913,7 +2926,6 @@ window.slopsmith = Object.assign(new EventTarget(), {
         return p;
     },
     emit(event, detail) {
-        this.dispatchEvent(new CustomEvent(event, { detail }));
         try {
             if (String(event || '').startsWith('song:') && this.capabilities?.emitEvent) {
                 this.capabilities.emitEvent('playback', event, detail || {});
@@ -2984,12 +2996,8 @@ audio.addEventListener('ended', () => {
     window.slopsmith.isPlaying = false;
     window.slopsmith.emit('song:ended', _songEventPayload());
 });
-let _lastSongPositionEventAt = 0;
 audio.addEventListener('timeupdate', () => {
-    const now = Date.now();
-    if (now - _lastSongPositionEventAt < 250) return;
-    _lastSongPositionEventAt = now;
-    window.slopsmith.emit('song:position-changed', Object.assign(_songEventPayload(), { duration: audio.duration || null }));
+    _emitSongPositionChanged(audio.currentTime, audio.duration || null);
 });
 audio.addEventListener('play', () => {
     window.slopsmith.isPlaying = true;
@@ -3129,7 +3137,9 @@ async function changeArrangement(index) {
                     if (started) {
                         isPlaying = true;
                         window.slopsmith.isPlaying = true;
-                        window.slopsmith.emit('song:play', _songEventPayload());
+                        const payload = _songEventPayload();
+                        window.slopsmith.emit('song:play', payload);
+                        window.slopsmith.emit('song:resume', payload);
                     }
                 } else audio.play().then(() => { isPlaying = true; }).catch(() => {});
             }
@@ -3155,7 +3165,9 @@ async function togglePlay() {
             isPlaying = true;
             document.getElementById('btn-play').textContent = '⏸ Pause';
             window.slopsmith.isPlaying = true;
-            window.slopsmith.emit('song:play', _songEventPayload());
+            const payload = _songEventPayload();
+            window.slopsmith.emit('song:play', payload);
+            window.slopsmith.emit('song:resume', payload);
         }
         return;
     }
@@ -4068,7 +4080,9 @@ async function startCountIn() {
                         isPlaying = true;
                         document.getElementById('btn-play').textContent = '⏸ Pause';
                         window.slopsmith.isPlaying = true;
-                        window.slopsmith.emit('song:play', _songEventPayload());
+                        const payload = _songEventPayload();
+                        window.slopsmith.emit('song:play', payload);
+                        window.slopsmith.emit('song:resume', payload);
                     }).catch((err) => console.error('[app] jucePlayer.play error:', err));
                 } else {
                     audio.play();

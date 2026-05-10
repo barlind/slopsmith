@@ -436,6 +436,8 @@ def _system_plugins(loaded_plugins: list[dict], plugins_root: "Path | list[Path]
         standards = [item for item in manifest.get("standards", []) if isinstance(item, str) and item]
         if standards:
             entry["standards"] = standards
+        if isinstance(manifest.get("capabilities"), (dict, list)) and manifest.get("capabilities"):
+            entry["capabilities"] = manifest.get("capabilities")
         if isinstance(manifest.get("settings_schema"), dict):
             entry["settings_schema"] = manifest.get("settings_schema")
         declared_ui = manifest.get("ui_contributions") if isinstance(manifest.get("ui_contributions"), dict) else manifest.get("ui")

@@ -2595,7 +2595,9 @@ def test_list_plugins_exposes_profile_domain_manifest_metadata(tmp_path, reset_p
         "standards": ["capability-pipelines.v1", "profiles.v1", 42, ""],
         "capabilities": {"profiles": {"roles": ["observer"]}},
         "settings_schema": {"schema_version": "1", "packable_keys": ["gain"]},
+        "ui_contributions": {"ui.player-panels": [{"id": "declared-panel"}]},
         "ui": {"ui.player-controls": [{"id": "declared-control"}]},
+        "runtime_domains": {"midi-control": {"role": "observer"}, "custom-domain": {"role": "owner"}},
         "domains": {"jobs": [{"id": "declared-job"}], "tempo-clock": {"role": "observer"}},
     }
     plugins_mod.LOADED_PLUGINS.append({
@@ -2619,11 +2621,16 @@ def test_list_plugins_exposes_profile_domain_manifest_metadata(tmp_path, reset_p
         assert plugin["standards"] == ["capability-pipelines.v1", "profiles.v1"]
         assert plugin["capabilities"] == {"profiles": {"roles": ["observer"]}}
         assert plugin["settings_schema"] == {"schema_version": "1", "packable_keys": ["gain"]}
-        assert plugin["ui_contributions"]["declared"] == {"ui.player-controls": [{"id": "declared-control"}]}
+        assert plugin["ui_contributions"]["declared"] == {
+            "ui.player-controls": [{"id": "declared-control"}],
+            "ui.player-panels": [{"id": "declared-panel"}],
+        }
         assert {item["legacy_source"] for item in plugin["ui_contributions"]["legacy"]} == {"nav", "screen", "settings", "type"}
         assert plugin["runtime_domains"] == {
             "backend.routes": {"legacy_source": "routes"},
+            "custom-domain": {"role": "owner"},
             "jobs": [{"id": "declared-job"}],
+            "midi-control": {"role": "observer"},
             "tempo-clock": {"role": "observer"},
         }
     finally:
