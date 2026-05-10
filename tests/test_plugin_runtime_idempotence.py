@@ -109,7 +109,9 @@ def test_capability_events_cover_navigation_notes_and_visualization():
 def test_plugin_loader_registers_manifest_capability_declarations():
     source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
 
-    assert "window.slopsmith.capabilities.registerParticipants(plugins)" in source
+    assert "const capabilityPlugins = fetchedPlugins.slice().sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')))" in source
+    assert "window.slopsmith.capabilities.registerParticipants(capabilityPlugins)" in source
+    assert "window.slopsmith.capabilities.registerParticipants(plugins)" not in source
     assert "plugin-manifest-load" in source
 
 

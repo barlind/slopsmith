@@ -5108,8 +5108,12 @@ async function loadPlugins() {
     const _savedMobileNav = mobileNavContainer ? mobileNavContainer.innerHTML : null;
     try {
         const resp = await fetch('/api/plugins');
-        plugins = await resp.json();
-        plugins = plugins.slice().sort((a, b) => String(a.name || a.id || '').localeCompare(String(b.name || b.id || '')));
+        const fetchedPlugins = await resp.json();
+        const capabilityPlugins = fetchedPlugins.slice().sort((a, b) => String(a.id || '').localeCompare(String(b.id || '')));
+        plugins = fetchedPlugins.slice().sort((a, b) => {
+            const nameDelta = String(a.name || a.id || '').localeCompare(String(b.name || b.id || ''));
+            return nameDelta || String(a.id || '').localeCompare(String(b.id || ''));
+        });
         const livePluginIds = new Set(plugins.map((plugin) => plugin.id));
         for (const [pluginId, contributions] of _pluginUiContributions) {
             if (livePluginIds.has(pluginId)) continue;
@@ -5123,7 +5127,7 @@ async function loadPlugins() {
 
         try {
             if (window.slopsmith?.capabilities?.registerParticipants) {
-                window.slopsmith.capabilities.registerParticipants(plugins);
+                window.slopsmith.capabilities.registerParticipants(capabilityPlugins);
                 window.slopsmith.capabilities.validateRuntime?.({ phase: 'plugin-manifest-load' });
             }
         } catch (e) {
