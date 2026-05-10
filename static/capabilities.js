@@ -412,6 +412,7 @@
         const selector = _targetSelector(ctx);
         const createdAt = Date.parse(claim.createdAt || '') || 0;
         return userOverrides.some(entry => {
+            if (entry.type !== 'manual') return false;
             if (entry.capability !== claim.capability) return false;
             if ((Date.parse(entry.timestamp || '') || 0) < createdAt) return false;
             const entrySelector = _targetSelector(entry);
@@ -599,7 +600,7 @@
                 commandContext.payload = decision.payload;
                 continue;
             }
-            if (['denied', 'failed', 'short-circuited', 'handled', 'degraded'].includes(decision.outcome)) break;
+            if (['denied', 'failed', 'short-circuited', 'handled', 'degraded', 'overridden'].includes(decision.outcome)) break;
         }
         if (!decisions.length) {
             const reason = `No provider handled ${capabilityName}.${commandName}`;
@@ -683,16 +684,7 @@
             reason: options.reason || (nextEnabled ? 'Runtime capability enabled' : 'Runtime capability disabled'),
             timestamp: _now(),
         };
-        const overrideEntry = {
-            capability: capabilityName,
-            source: participant.runtimeOverride.requester,
-            target: pluginId,
-            reason: participant.runtimeOverride.reason,
-        };
         const resolved = _resolvePipeline(capabilityName);
-        _remember(userOverrides, {
-            ...overrideEntry,
-        });
         _emitEvent('diagnostics', 'participant.state-changed', {
             capability: capabilityName,
             pluginId,
@@ -780,6 +772,7 @@
     function recordUserOverride(override) {
         const source = override && typeof override === 'object' ? override : {};
         _remember(userOverrides, {
+            type: 'manual',
             capability: source.capability || 'unknown',
             command: source.command,
             source: source.source || 'unknown',
@@ -1457,7 +1450,7 @@
             },
         },
         'audio-monitoring': {
-            roles: ['provider'],
+            roles: ['owner', 'provider'],
             commands: ['start', 'stop'],
             events: ['state-changed'],
             compatibility: 'degrade-noop',

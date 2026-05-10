@@ -75,6 +75,18 @@ def test_capability_registry_exposes_claim_dispatch_and_ready_contracts():
     assert "outcome: 'overridden'" in source
 
 
+def test_capability_runtime_overrides_do_not_mask_claims():
+    source = (ROOT / "static" / "capabilities.js").read_text(encoding="utf-8")
+    set_enabled = source[source.index("function setParticipantEnabled("):source.index("function registerParticipants(")]
+    audio_monitoring = source[source.index("'audio-monitoring':"):source.index("'backend.routes':")]
+
+    assert "['denied', 'failed', 'short-circuited', 'handled', 'degraded', 'overridden'].includes(decision.outcome)" in source
+    assert "if (entry.type !== 'manual') return false;" in source
+    assert "type: 'manual'" in source
+    assert "_remember(userOverrides" not in set_enabled
+    assert "roles: ['owner', 'provider']" in audio_monitoring
+
+
 def test_playback_capability_wraps_transport_and_highway_surfaces():
     app_source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
     capability_source = (ROOT / "static" / "capabilities.js").read_text(encoding="utf-8")
