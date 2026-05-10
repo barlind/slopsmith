@@ -833,7 +833,9 @@ async function showScreen(id) {
         loadSettings();
     }
     if (id !== 'player') {
+        const audio = document.getElementById('audio');
         const stopTime = _audioTime();
+        const hadPlayableSong = !!audio.src || !!window._juceAudioUrl || isPlaying;
         highway.stop();
         // Cancel any queued seeks, in-flight shim closures, AND active
         // count-in timers before stopping playback so none of these paths
@@ -858,8 +860,7 @@ async function showScreen(id) {
             window._juceMode = false;
             window._juceAudioUrl = null;
         }
-        const audio = document.getElementById('audio');
-        if (audio.src || isPlaying) window.slopsmith.emit('song:stop', { time: stopTime || 0, screen: id });
+        if (hadPlayableSong) window.slopsmith.emit('song:stop', { time: stopTime || 0, screen: id });
         audio.pause();
         audio.src = '';
         isPlaying = false;
@@ -2926,6 +2927,7 @@ window.slopsmith = Object.assign(new EventTarget(), {
         return p;
     },
     emit(event, detail) {
+        this.dispatchEvent(new CustomEvent(event, { detail }));
         try {
             if (String(event || '').startsWith('song:') && this.capabilities?.emitEvent) {
                 this.capabilities.emitEvent('playback', event, detail || {});

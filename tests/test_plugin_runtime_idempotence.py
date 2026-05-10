@@ -65,6 +65,15 @@ def test_plugin_loader_registers_manifest_capability_declarations():
     assert "plugin-manifest-load" in source
 
 
+def test_app_event_bus_dispatches_locally_and_preserves_juce_stop_state():
+    source = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "this.dispatchEvent(new CustomEvent(event, { detail }))" in source
+    assert "const hadPlayableSong = !!audio.src || !!window._juceAudioUrl || isPlaying" in source
+    assert "sm.emit('song:resume', { time: jucePlayer.currentTime })" in source
+    assert "window.slopsmith.emit('song:resume', { time: jucePlayer.currentTime })" in source
+
+
 def test_nam_and_stems_use_owner_claim_dispatch_semantics():
     nam_source = _sibling_file("slopsmith-plugin-nam-tone", "screen.js").read_text(encoding="utf-8")
     stems_source = _sibling_file("slopsmith-plugin-stems", "screen.js").read_text(encoding="utf-8")

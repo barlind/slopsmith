@@ -523,12 +523,25 @@ def test_system_plugins_exports_manifest_capability_declarations(tmp_path):
         "_manifest": {
             "version": "1.0.0",
             "capabilities": {"stems": {"roles": ["requester", "observer"]}},
+            "ui_contributions": {"ui.player-panels": [{"id": "capable-panel"}]},
+            "ui": {"ui.player-controls": [{"id": "capable-control"}]},
+            "runtime_domains": {"midi-control": {"role": "observer"}},
+            "domains": {"tempo-clock": {"role": "provider"}},
         },
     }]
 
     result = db._system_plugins(loaded_plugins, plugins_root=tmp_path)
 
-    assert result["plugins"][0]["capabilities"] == {"stems": {"roles": ["requester", "observer"]}}
+    plugin = result["plugins"][0]
+    assert plugin["capabilities"] == {"stems": {"roles": ["requester", "observer"]}}
+    assert plugin["ui_contributions"] == {
+        "ui.player-controls": [{"id": "capable-control"}],
+        "ui.player-panels": [{"id": "capable-panel"}],
+    }
+    assert plugin["runtime_domains"] == {
+        "midi-control": {"role": "observer"},
+        "tempo-clock": {"role": "provider"},
+    }
 
 
 def test_system_plugins_multi_root_scans_all(tmp_path):

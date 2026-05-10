@@ -440,11 +440,17 @@ def _system_plugins(loaded_plugins: list[dict], plugins_root: "Path | list[Path]
             entry["capabilities"] = manifest.get("capabilities")
         if isinstance(manifest.get("settings_schema"), dict):
             entry["settings_schema"] = manifest.get("settings_schema")
-        declared_ui = manifest.get("ui_contributions") if isinstance(manifest.get("ui_contributions"), dict) else manifest.get("ui")
-        if isinstance(declared_ui, dict):
+        declared_ui = {
+            **(manifest.get("ui_contributions") if isinstance(manifest.get("ui_contributions"), dict) else {}),
+            **(manifest.get("ui") if isinstance(manifest.get("ui"), dict) else {}),
+        }
+        if declared_ui:
             entry["ui_contributions"] = declared_ui
-        runtime_domains = manifest.get("runtime_domains") if isinstance(manifest.get("runtime_domains"), dict) else manifest.get("domains")
-        if isinstance(runtime_domains, dict):
+        runtime_domains = {
+            **(manifest.get("runtime_domains") if isinstance(manifest.get("runtime_domains"), dict) else {}),
+            **(manifest.get("domains") if isinstance(manifest.get("domains"), dict) else {}),
+        }
+        if runtime_domains:
             entry["runtime_domains"] = dict(runtime_domains)
         elif manifest.get("routes"):
             entry["runtime_domains"] = {}
