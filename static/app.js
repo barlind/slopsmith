@@ -2930,7 +2930,8 @@ window.slopsmith = Object.assign(new EventTarget(), {
         this.dispatchEvent(new CustomEvent(event, { detail }));
         try {
             if (String(event || '').startsWith('song:') && this.capabilities?.emitEvent) {
-                this.capabilities.emitEvent('playback', event, detail || {});
+                const capabilityDetail = detail || Object.create(null);
+                this.capabilities.emitEvent('playback', event, capabilityDetail);
             }
         } catch (_e) { /* capability observers must not break app events */ }
     },
